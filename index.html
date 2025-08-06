@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>地震•津波情報</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="favicon.ico">
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      background-color: #fff;
+    }
+
+    #menuBar {
+      position: relative !important;
+      top: 1.1%;
+      left: 0px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 25px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      padding: 6px 12px;
+      margin-left: 0px;
+      margin-top: 0px;
+      display: inline-block;
+    }
+
+    #menuBar select {
+      font-size: 14px;
+      border: none;
+      background: transparent;
+      outline: none;
+    }
+
+    .section {
+      background: #fff;
+      padding: 15px;
+      margin-top: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      display: none;
+      position: relative;
+      z-index: 1;
+    }
+
+    #infoContainer p {
+      margin: 0 0 10px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    #infoContainer p:not(.area-info):not(.prefecture) {
+      line-height: 1.6;
+    }
+
+    .intensity-group {
+      margin-top: 15px;
+    }
+
+    .intensity {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .prefecture {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .area-info {
+      white-space: normal;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+      line-height: 1.8;
+    }
+
+    .intensity-group p {
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="menuBar">
+    <select id="infoSelector">
+      <option value="quake" selected>地震情報</option>
+      <option value="tsunami">津波情報</option>
+    </select>
+  </div>
+
+  <div id="infoContainer" class="section"></div>
+
+  <script>
+    let lastJsonFile = "";
+
+    document.getElementById('infoSelector').addEventListener('change', (e) => {
+      const value = e.target.value;
+      if (value === 'quake') {
+        document.getElementById('infoContainer').style.display = 'block';
+      } else if (value === 'tsunami') {
+        location.href = 'index2.html';
+      }
+    });
+
+    async function tryFetchJson(url) {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error("Network error");
+        return await res.json();
+      } catch {
+        return null;
+      }
+    }
+
+    async function fetchLatestQuakeData(retry = 0) {
+      const listData = await tryFetchJson('https://www.jma.go.jp/bosai/quake/data/list.json');
+      if (!listData || !listData.length) {
+        if (retry < 5) {
+          setTimeout(() => fetchLatestQuakeData(retry + 1), 200);
+        } else {
+          showQuakeError();
+        }
+        return;
+      }
+
+      const latestJsonFile = listData[0].json;
+      if (latestJsonFile === lastJsonFile) return;
+      lastJsonFile = latestJsonFile;
+
+      const quakeData = await tryFetchJson(`https://www.jma.go.jp/bosai/quake/data/${latestJsonFile}`);
+      if (!quakeData) {
+        if (retry < 5) {
+          setTimeout(() => fetchLatestQuakeData(retry + 1), 200);
+        } else {
+          showQuakeError();
+        }
+        return;
+      }
+
+      const container = document.getElementById("infoContainer");
+      let html = "";
+
+      const control = quakeData.Control;
+      const head = quakeData.Head;
+      const body = quakeData.Body;
+      const eq = body?.Earthquake;
+      const int = body?.Intensity?.Observation;
+
+      if (head?.InfoKind) html += `<h1><strong>${head.InfoKind}</strong></h1>`;
+      if (control?.Title) html += `<p><strong>詳細情報:</strong> ${control.Title}</p>`;
+      if (control?.EditorialOffice) html += `<p><strong>編集官署:</strong> ${control.EditorialOffice}</p>`;
+      if (head?.InfoType && head?.Serial) html += `<p><strong>情報種別:</strong> ${head.InfoType} ${head.Serial}</p>`;
+      if (eq?.Hypocenter?.Area?.Name) html += `<p><strong>震源地:</strong> ${eq.Hypocenter.Area.Name}</p>`;
+      if (eq?.Hypocenter?.Area?.Code) html += `<p><strong>震央コード:</strong> ${eq.Hypocenter.Area.Code}</p>`;
+      if (int?.MaxInt) {
+        let maxInt = int.MaxInt;
+        maxInt = maxInt.replace('5-', '5弱').replace('5+', '5強')
+                       .replace('6-', '6弱').replace('6+', '6強');
+        html += `<p><strong>最大震度:</strong> ${maxInt}</p>`;
+      }
+      if (eq?.Magnitude) html += `<p><strong>マグニチュード:</strong> ${eq.Magnitude}</p>`;
+
+      let lat = "不明", lon = "不明", depth = "不明";
+      const coord = eq?.Hypocenter?.Area?.Coordinate;
+      if (coord && /^[\+\-][0-9.]+[\+\-][0-9.]+/.test(coord)) {
+        const match = coord.match(/([+\-][0-9.]+)([+\-][0-9.]+)([+\-][0-9]+)?/);
+        if (match) {
+          lat = match[1].replace(/[+\-]/g, '');
+          lon = match[2].replace(/[+\-]/g, '');
+          html += `<p><strong>座標:</strong> 緯度 ${lat} / 経度 ${lon}</p>`;
+
+          if (match[3]) {
+            const rawDepth = parseInt(match[3], 10);
+            if (rawDepth === 0) {
+              html += `<p><strong>深さ:</strong> ごく浅い</p>`;
+            } else {
+              depth = Math.abs(rawDepth) / 1000;
+              html += `<p><strong>深さ:</strong> ${depth} km</p>`;
+            }
+          } else {
+            html += `<p><strong>深さ:</strong> ${depth}</p>`;
+          }
+        }
+      }
+
+      if (eq?.OriginTime) {
+        html += `<p><strong>発生時刻:</strong> ${new Date(eq.OriginTime).toLocaleString()}</p>`;
+      }
+
+      if (head?.Headline?.Text) html += `<p><strong>コメント:</strong> ${head.Headline.Text}</p>`;
+      if (body?.Comments?.ForecastComment?.Text) html += `<p><strong>津波情報:</strong> ${body.Comments.ForecastComment.Text}</p>`;
+      if (control?.PublishingOffice) html += `<p><strong>提供元:</strong> ${control.PublishingOffice}</p>`;
+
+      if (int?.Pref?.length > 0) {
+        const intensityGroups = {};
+        int.Pref.forEach(pref => {
+          if (pref.Area) {
+            pref.Area.forEach(area => {
+              area.City?.forEach(city => {
+                city.IntensityStation?.forEach(station => {
+                  let intensity = station.Int || '不明';
+                  intensity = intensity.replace('5-', '5弱').replace('5+', '5強')
+                                       .replace('6-', '6弱').replace('6+', '6強');
+                  const name = station.Name.replace('＊', '');
+                  if (!intensityGroups[intensity]) intensityGroups[intensity] = {};
+                  if (!intensityGroups[intensity][pref.Name]) intensityGroups[intensity][pref.Name] = new Set();
+                  intensityGroups[intensity][pref.Name].add(name);
+                });
+              });
+            });
+          }
+        });
+
+        const keys = Object.keys(intensityGroups);
+        if (keys.length > 0) {
+          html += `<h2><strong>各地の震度情報</strong></h2>`;
+          const intensityOrder = ['7', '6強', '6弱', '5強', '5弱', '4', '3', '2', '1', '不明'];
+          intensityOrder.forEach(intensity => {
+            const group = intensityGroups[intensity];
+            if (group) {
+              html += `<div class="intensity-group"><h2 class="intensity">震度 ${intensity}</h2>`;
+              for (const pref in group) {
+                const stations = Array.from(group[pref]).join('　');
+                html += `<p class="prefecture">[${pref}]</p><p class="area-info">${stations}</p>`;
+              }
+              html += `</div>`;
+            }
+          });
+        }
+      }
+
+      container.innerHTML = html;
+      if (document.getElementById('infoSelector').value === 'quake') {
+        container.style.display = "block";
+      }
+    }
+
+    function showQuakeError() {
+      // エラーメッセージ非表示にするため空の関数にします
+    }
+
+    fetchLatestQuakeData();
+    setInterval(fetchLatestQuakeData, 100);
+  </script>
+</body>
+</html>

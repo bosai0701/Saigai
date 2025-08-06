@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>地震•津波情報</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f4f4f4;
+      padding: 20px;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      margin: 20px 0;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px 10px;
+      text-align: center;
+    }
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    .header-major {
+      background: rgba(200,0,255);
+      color: white;
+    }
+    .header-warning {
+      background: rgba(255,40,0);
+      color: white;
+    }
+    .header-advisory {
+      background: rgba(250,245,0);
+      color: black;
+    }
+    .header-forecast {
+      background: #05BEFF;
+      color: black;
+    }
+    .header-unknown {
+      background: #78909c;
+      color: white;
+    }
+    #legend {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    #legend span {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    #menuBar {
+      position: relative !important;
+      top: 1.1%;
+      left: 0px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 25px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      padding: 6px 12px;
+      margin-left: 0px;
+      margin-top: 0px;
+      display: inline-block;
+      font-size: 14px;
+      user-select: none;
+    }
+    #menuBar select {
+      font-size: 14px;
+      border: none;
+      background: transparent;
+      outline: none;
+      cursor: pointer;
+    }
+    h1, #tsunamiSections {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="menuBar">
+    <select id="infoSelector">
+      <option value="quake">地震情報</option>
+      <option value="tsunami" selected>津波情報</option>
+    </select>
+  </div>
+
+  <h1>津波情報</h1>
+  <div id="legend"></div>
+  <div id="tsunamiSections"></div>
+
+  <script>
+    let previousFileName = null;
+
+    function formatDateTime(dtStr) {
+      if (!dtStr) return '---';
+      const dt = new Date(dtStr);
+      const yyyy = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const hh = String(dt.getHours()).padStart(2, '0');
+      const mi = String(dt.getMinutes()).padStart(2, '0');
+      return `${yyyy}年${mm}月${dd}日 ${hh}:${mi}`;
+    }
+
+    function getHeaderClass(name) {
+      if (name.includes("大津波")) return "header-major";
+      if (name.includes("津波警報")) return "header-warning";
+      if (name.includes("津波注意報")) return "header-advisory";
+      if (name.includes("津波予報")) return "header-forecast";
+      return "header-unknown";
+    }
+
+    function createLegend(namesSet) {
+      const legend = document.getElementById('legend');
+      legend.innerHTML = '';
+      namesSet.forEach(name => {
+        const span = document.createElement('span');
+        span.className = getHeaderClass(name);
+        span.textContent = name;
+        legend.appendChild(span);
+      });
+    }
+
+    async function tryFetchJson(url) {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error("ネットワークエラー");
+        return await res.json();
+      } catch {
+        return null;
+      }
+    }
+
+    async function loadTsunamiData(retry = 0) {
+      const listUrl = "https://www.jma.go.jp/bosai/tsunami/data/list.json";
+      const listData = await tryFetchJson(listUrl);
+
+      if (!listData || !listData.length) {
+        if (retry < 5) {
+          setTimeout(() => loadTsunamiData(retry + 1), 200);
+          return;
+        } else {
+          showErrorMessage();
+          return;
+        }
+      }
+
+      const latestFileName = listData[0].json;
+      if (previousFileName === latestFileName) {
+        console.log("同一ファイルのため再描画スキップ");
+        return;
+      }
+      previousFileName = latestFileName;
+
+      const latestUrl = `https://www.jma.go.jp/bosai/tsunami/data/${latestFileName}`;
+      const data = await tryFetchJson(latestUrl);
+
+      if (!data) {
+        if (retry < 5) {
+          setTimeout(() => loadTsunamiData(retry + 1), 200);
+          return;
+        } else {
+          showErrorMessage();
+          return;
+        }
+      }
+
+      const sectionContainer = document.getElementById('tsunamiSections');
+      sectionContainer.innerHTML = '';
+
+      const items = data.Body.Tsunami?.Forecast?.Item || [];
+      const announceTime = formatDateTime(data.Head?.TargetDateTime);
+
+      const grouped = {};
+      const legendSet = new Set();
+
+      items.forEach(item => {
+        const warningName = item.Category?.Kind?.Name || '（区分不明）';
+        if (!grouped[warningName]) grouped[warningName] = [];
+        grouped[warningName].push(item);
+      });
+
+      let foundValidData = false;
+
+      Object.entries(grouped).forEach(([warningName, items]) => {
+        const section = document.createElement('section');
+        const heading = document.createElement('h2');
+        heading.textContent = warningName;
+        section.appendChild(heading);
+        const headerClass = getHeaderClass(warningName);
+        legendSet.add(warningName);
+
+        const table = document.createElement('table');
+        table.innerHTML = `
+          <thead>
+            <tr class="${headerClass}">
+              <th>地域</th>
+              <th>観測点</th>
+              <th>観測状況</th>
+              <th>満潮時刻</th>
+              <th>発表時刻</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        `;
+        const tbody = table.querySelector('tbody');
+
+        let hasStationData = false;
+
+        items.forEach(item => {
+          const areaName = item.Area?.Name || '---';
+          const stations = item.Station || [];
+          if (stations.length === 0) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${areaName}</td>
+              <td>---</td>
+              <td>---</td>
+              <td>---</td>
+              <td>${announceTime}</td>
+            `;
+            tbody.appendChild(row);
+          } else {
+            hasStationData = true;
+            stations.forEach(station => {
+              const name = station.Name || '---';
+              const condition = station.FirstHeight?.Condition || '---';
+              const tideTime = formatDateTime(station.HighTideDateTime);
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                <td>${areaName}</td>
+                <td>${name}</td>
+                <td>${condition}</td>
+                <td>${tideTime}</td>
+                <td>${announceTime}</td>
+              `;
+              tbody.appendChild(row);
+            });
+          }
+        });
+
+        section.appendChild(table);
+        sectionContainer.appendChild(section);
+
+        if (hasStationData) {
+          foundValidData = true;
+        }
+      });
+
+      if (!foundValidData) {
+        sectionContainer.innerHTML = '<p style="text-align:center; font-weight:bold; font-size:1.2em; margin-top: 20px;">現在、大津波警報・津波警報・津波注意報・津波予報（若干の海面変動）を発表していません。</p>';
+        document.getElementById('legend').innerHTML = '';
+      } else {
+        createLegend(legendSet);
+      }
+
+      document.querySelector('h1').style.display = 'block';
+      sectionContainer.style.display = 'block';
+    }
+
+    function showErrorMessage() {
+      // エラーメッセージ表示なしに変更
+    }
+
+    document.getElementById('infoSelector').addEventListener('change', (e) => {
+      if (e.target.value === 'quake') {
+        location.href = 'index.html';
+      }
+    });
+
+    window.addEventListener('load', () => {
+      loadTsunamiData();
+      setInterval(() => {
+        loadTsunamiData();
+      }, 100);
+    });
+  </script>
+</body>
+</html>
