@@ -54,6 +54,15 @@
       line-height: 1.6;
     }
 
+    /* コメント詳細の行間を詰める */
+    #infoContainer p.comment-detail {
+      margin-top: 0.3em;
+      font-weight: normal;
+      font-size: 1em;
+      white-space: pre-wrap;
+      line-height: 1.2;
+    }
+
     .intensity-group {
       margin-top: 15px;
     }
@@ -149,7 +158,16 @@
 
       if (head?.InfoKind) html += `<h1><strong>${head.InfoKind}</strong></h1>`;
       if (control?.Title) html += `<p><strong>詳細情報:</strong> ${control.Title}</p>`;
-      if (control?.EditorialOffice) html += `<p><strong>編集官署:</strong> ${control.EditorialOffice}</p>`;
+      if (control?.EditorialOffice) {
+        html += `<p><strong>編集官署:</strong> ${control.EditorialOffice}</p>`;
+
+        if (body?.EarthquakeInfo && body.EarthquakeInfo.Text.trim() !== "") {
+          html += `<p><strong>コメント:</strong> <span style="font-weight: normal; white-space: pre-wrap;">${head?.Headline?.Text || ""}</span></p>`;
+          html += `<p class="comment-detail">${body.EarthquakeInfo.Text}</p>`;
+        } else if (head?.Headline?.Text) {
+          html += `<p><strong>コメント:</strong> <span style="font-weight: normal; white-space: pre-wrap;">${head.Headline.Text}</span></p>`;
+        }
+      }
       if (head?.InfoType && head?.Serial) html += `<p><strong>情報種別:</strong> ${head.InfoType} ${head.Serial}</p>`;
       if (eq?.Hypocenter?.Area?.Name) html += `<p><strong>震源地:</strong> ${eq.Hypocenter.Area.Name}</p>`;
       if (eq?.Hypocenter?.Area?.Code) html += `<p><strong>震央コード:</strong> ${eq.Hypocenter.Area.Code}</p>`;
@@ -188,9 +206,12 @@
         html += `<p><strong>発生時刻:</strong> ${new Date(eq.OriginTime).toLocaleString()}</p>`;
       }
 
-      if (head?.Headline?.Text) html += `<p><strong>コメント:</strong> ${head.Headline.Text}</p>`;
-      if (body?.Comments?.ForecastComment?.Text) html += `<p><strong>津波情報:</strong> ${body.Comments.ForecastComment.Text}</p>`;
-      if (control?.PublishingOffice) html += `<p><strong>提供元:</strong> ${control.PublishingOffice}</p>`;
+      if (body?.Comments?.ForecastComment?.Text) {
+        html += `<p><strong>津波情報:</strong> ${body.Comments.ForecastComment.Text}</p>`;
+      }
+      if (control?.PublishingOffice) {
+        html += `<p><strong>提供元:</strong> ${control.PublishingOffice}</p>`;
+      }
 
       if (int?.Pref?.length > 0) {
         const intensityGroups = {};
@@ -237,7 +258,7 @@
     }
 
     function showQuakeError() {
-      // エラーメッセージ非表示にするため空の関数にします
+      // エラーメッセージ非表示のため空関数
     }
 
     fetchLatestQuakeData();
