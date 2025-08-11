@@ -54,7 +54,6 @@
       line-height: 1.6;
     }
 
-    /* コメント詳細の行間を詰める */
     #infoContainer p.comment-detail {
       margin-top: 0.3em;
       font-weight: normal;
@@ -160,13 +159,6 @@
       if (control?.Title) html += `<p><strong>詳細情報:</strong> ${control.Title}</p>`;
       if (control?.EditorialOffice) {
         html += `<p><strong>編集官署:</strong> ${control.EditorialOffice}</p>`;
-
-        if (body?.EarthquakeInfo && body.EarthquakeInfo.Text.trim() !== "") {
-          html += `<p><strong>コメント:</strong> <span style="font-weight: normal; white-space: pre-wrap;">${head?.Headline?.Text || ""}</span></p>`;
-          html += `<p class="comment-detail">${body.EarthquakeInfo.Text}</p>`;
-        } else if (head?.Headline?.Text) {
-          html += `<p><strong>コメント:</strong> <span style="font-weight: normal; white-space: pre-wrap;">${head.Headline.Text}</span></p>`;
-        }
       }
       if (head?.InfoType && head?.Serial) html += `<p><strong>情報種別:</strong> ${head.InfoType} ${head.Serial}</p>`;
       if (eq?.Hypocenter?.Area?.Name) html += `<p><strong>震源地:</strong> ${eq.Hypocenter.Area.Name}</p>`;
@@ -204,6 +196,14 @@
 
       if (eq?.OriginTime) {
         html += `<p><strong>発生時刻:</strong> ${new Date(eq.OriginTime).toLocaleString()}</p>`;
+      }
+
+      // コメントを津波情報の前に移動
+      if (body?.EarthquakeInfo && body.EarthquakeInfo.Text.trim() !== "") {
+        html += `<p><strong>コメント:</strong> <span style="font-weight: normal; white-space: pre-wrap;">${head?.Headline?.Text || ""}</span></p>`;
+        html += `<p class="comment-detail">${body.EarthquakeInfo.Text}</p>`;
+      } else if (head?.Headline?.Text) {
+        html += `<p><strong>コメント:</strong> <span style="font-weight: normal; white-space: pre-wrap;">${head.Headline.Text}</span></p>`;
       }
 
       if (body?.Comments?.ForecastComment?.Text) {
@@ -258,7 +258,6 @@
     }
 
     function showQuakeError() {
-      // エラーメッセージ非表示のため空関数
     }
 
     fetchLatestQuakeData();
