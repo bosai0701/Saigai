@@ -116,7 +116,7 @@
       if (name.includes("大津波")) return "header-major";
       if (name.includes("津波警報")) return "header-warning";
       if (name.includes("津波注意報")) return "header-advisory";
-      if (name.includes("津波予報")) return "header-forecast";
+      if (name.includes("津波予報")) return "header-forecast"; // 若干の海面変動含む
       return "header-unknown";
     }
 
@@ -157,7 +157,6 @@
 
       const latestFileName = listData[0].json;
       if (previousFileName === latestFileName) {
-        console.log("同一ファイルのため再描画スキップ");
         return;
       }
       previousFileName = latestFileName;
@@ -220,12 +219,14 @@
         items.forEach(item => {
           const areaName = item.Area?.Name || '---';
           const stations = item.Station || [];
+
+          // stationがなくても必ず表示（若干の海面変動用）
           if (stations.length === 0) {
             const row = document.createElement('tr');
             row.innerHTML = `
               <td>${areaName}</td>
               <td>---</td>
-              <td>---</td>
+              <td>${item.Category?.Kind?.Name || '---'}</td>
               <td>---</td>
               <td>${announceTime}</td>
             `;
@@ -252,7 +253,7 @@
         section.appendChild(table);
         sectionContainer.appendChild(section);
 
-        if (hasStationData) {
+        if (items.length > 0) {
           foundValidData = true;
         }
       });
@@ -269,7 +270,7 @@
     }
 
     function showErrorMessage() {
-      // エラーメッセージ表示なしに変更
+      // エラーメッセージ表示なし
     }
 
     document.getElementById('infoSelector').addEventListener('change', (e) => {
@@ -282,7 +283,7 @@
       loadTsunamiData();
       setInterval(() => {
         loadTsunamiData();
-      }, 100);
+      }, 10000); // 更新間隔 10秒に調整
     });
   </script>
 </body>
